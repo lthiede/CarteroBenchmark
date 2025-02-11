@@ -1,0 +1,304 @@
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
+- name: Initialize some default values
+  hosts: all
+  connection: ssh
+  tasks:
+    - set_fact:
+        private_ip: "{{ hostvars[inventory_hostname]['ansible_default_ipv4']['address'] }}"
+    - set_fact:
+        logserviceServers: "{{ groups['logservice'] | map('extract', hostvars, ['ansible_default_ipv4', 'address']) | map('regex_replace', '^(.*)$', '-o \\1:50000') | join(' ') }}"
+    - set_fact:
+        cartero_source:
+          src: "https://github.com/lthiede/cartero/archive/integrate-segmentstore-highpoint.tar.gz"
+          remote: yes
+      when: cartero_source is not defined
+    - set_fact:
+        go_amd:
+          src: "https://go.dev/dl/go1.23.3.linux-amd64.tar.gz"
+          remote: yes
+      when: go_amd is not defined
+    - set_fact:
+        go_arm:
+          src: "https://go.dev/dl/go1.23.3.linux-arm64.tar.gz"
+          remote: yes
+      when: go_arm is not defined
+
+- name: Find disks for logservice hosts
+  hosts: logservice
+  connection: ssh
+  # become: true
+  become: false
+  tasks:
+    - name: Initialize empty list for devices
+      set_fact:
+        storage_devices: []
+      no_log: true
+  
+    - name: Get NVMe devices
+      set_fact:
+        storage_devices: "{{ storage_devices + ['/dev/' ~ item.key ] }}"
+      with_dict: "{{ ansible_devices }}"
+      when: "item.key.startswith('nvme') and not item.value.partitions"
+
+    - name: Show device names
+      debug: var=storage_devices
+
+- name: Configuration for getting and building rust-segmentstore
+  hosts: client:messageservice:logservice
+  # become: true
+  become: false
+  tasks:
+    - name: Create git config
+      copy:
+        src: ./gitconfig
+        dest: /home/ubuntu/.gitconfig
+    - name: Create ssh config
+      copy:
+        src: ./sshconfig
+        dest: /home/ubuntu/.ssh/config
+    - name: Copy key
+      copy:
+        src: ./private_github
+        dest: /home/ubuntu/.ssh/private_github
+    - name: Install rust
+      shell: |
+        curl https://sh.rustup.rs -sSf | sh -s - -y
+
+- name: Requirements for building rust-segmentstore
+  hosts: client:messageservice:logservice
+  become: true
+  tasks:
+    - name: Install packages
+      ansible.builtin.package:
+        state: latest
+        update_cache: yes
+        name:
+          - llvm-dev
+          - libclang-dev
+          - make 
+          - clang
+          - g++
+          - gcc
+
+- name: Download logservice
+  hosts: logservice
+  become: false
+  tasks:
+    - name: Clone rust-segmentstore
+      shell: |
+        ssh-keygen -F github.com || ssh-keyscan github.com >>~/.ssh/known_hosts
+        git clone git@github.com:toziegler/rust-segmentstore.git
+        cd rust-segmentstore
+        git checkout go-client-batches
+  
+- name: Install logservice
+  hosts: logservice
+#  become: true
+  become: false
+  tasks:
+    - name: Build rust-segmentstore
+      shell: |
+        cd /home/ubuntu/rust-segmentstore
+        . "$HOME/.cargo/env"
+        CARGO_NET_GIT_FETCH_WITH_CLI=true RUSTFLAGS="-Ctarget-cpu=native" cargo build -r
+
+- name: Install cartero server
+  hosts: messageservice
+  become: false
+  tasks:
+    - name: Go directory
+      ansible.builtin.file:
+        path: /home/ubuntu/bin
+        state: directory
+    - name: Install go arm
+      unarchive:
+        src: "{{ go_arm.src }}"
+        # src: "https://go.dev/dl/go1.23.3.linux-arm64.tar.gz"
+        dest: /home/ubuntu/bin
+        remote_src: "{{ go_arm.remote }}"
+        # remote_src: yes
+    - name: Source updated profile
+      shell: . ~/.profile
+    - name: Download and extract cartero  
+      unarchive:
+        src: "{{ cartero_source.src }}"
+        # src: "https://github.com/lthiede/cartero/archive/integrate-segmentstore-highpoint.tar.gz"
+        dest: /home/ubuntu
+        remote_src: "{{ cartero_source.remote }}"
+        # remote_src: yes
+    - name: Do not ask for github fingerprint
+      shell: |
+        ssh-keygen -F github.com || ssh-keyscan github.com >>~/.ssh/known_hosts
+    - name: Try to build broker but fail
+      shell: |
+        export PATH=$PATH:/home/ubuntu/bin/go/bin
+        cd /home/ubuntu/cartero-integrate-segmentstore-highpoint/cmd/server
+        CGO_ENABLED=1 go build
+      register: result
+      ignore_errors: yes
+    - name: Assert that the command failed
+      ansible.builtin.assert:
+        that:
+          - result.rc != 0
+    - name: Build rust log client
+      shell: |
+        export PATH=$PATH:/home/ubuntu/bin/go/bin
+        cd $(go env GOPATH)/pkg/mod/github.com/toziegler/
+        chmod -R +w rust-segmentstore@v0.0.0-20241108135410-e4d6fb8a1b33
+        cd rust-segmentstore@v0.0.0-20241108135410-e4d6fb8a1b33/libsls-bindings
+        . "$HOME/.cargo/env"
+        CARGO_NET_GIT_FETCH_WITH_CLI=true RUSTFLAGS="-Ctarget-cpu=native" cargo build -r
+    - name: Move rust log client to go log client
+      shell: |
+        export PATH=$PATH:/home/ubuntu/bin/go/bin
+        cd $(go env GOPATH)/pkg/mod/github.com/toziegler/rust-segmentstore@v0.0.0-20241108135410-e4d6fb8a1b33/libsls-bindings
+        mv target/release/libsls.h go_example/include/libsls.h
+        mv target/release/libsls.so go_example/lib/libsls.so
+    - name: Build broker
+      shell: |
+        export PATH=$PATH:/home/ubuntu/bin/go/bin
+        cd /home/ubuntu/cartero-integrate-segmentstore-highpoint/cmd/server
+        CGO_ENABLED=1 go build -a
+
+- name: Install cartero client
+  hosts: client
+  connection: ssh
+  # become: true
+  become: false
+  tasks:
+    - name: Go directory
+      ansible.builtin.file:
+        path: /home/ubuntu/bin
+        state: directory
+    - name: Install go amd
+      unarchive:
+        src: "{{ go_amd.src }}"
+        # src: "https://go.dev/dl/go1.23.3.linux-amd64.tar.gz"
+        dest: /home/ubuntu/bin
+        remote_src: "{{ go_amd.remote }}"
+        # remote_src: yes
+    - name: Download and extract cartero  
+      unarchive:
+        src: "{{ cartero_source.src }}"
+        # src: "https://github.com/lthiede/cartero/archive/integrate-segmentstore-highpoint.tar.gz"
+        dest: /home/ubuntu
+        remote_src: "{{ cartero_source.remote }}"
+        # remote_src: yes
+    - name: Build cartero client
+      shell: |
+        cd /home/ubuntu/cartero-integrate-segmentstore-highpoint/experiments/produce_to_log/via_broker
+        export PATH=$PATH:/home/ubuntu/bin/go/bin
+        go build
+
+- name: Install tuned
+  hosts: client:messageservice:logservice
+  connection: ssh
+  become: true
+  tasks:
+    - name: Install Tuned packages
+      ansible.builtin.package:
+        state: latest
+        update_cache: true
+        name:
+          - tuned
+    - name: Enable Tuned
+      service: name=tuned state=started enabled=yes
+    - name: Set performance profile
+      command: tuned-adm profile latency-performance
+
+- name: Distributed experiment runner setup
+  hosts: client:messageservice:logservice
+  connection: ssh
+  become: true
+  tasks:
+    - name: Measurement tools
+      ansible.builtin.apt:
+        pkg:
+          - iotop-c
+          - bmon
+          - python3.10-venv
+          - python3-pip
+        update_cache: true
+      when: not inventory_hostname in groups['messageservice']
+    - name: Measurement tools pulsar
+      ansible.builtin.apt:
+        pkg:
+          - iotop-c
+          - bmon
+          - python3.12-venv
+          - python3-pip
+        update_cache: true
+      when: inventory_hostname in groups['messageservice']
+    - name: Run distexprunner
+      shell: |
+        rm -r venv
+        python3 -m venv venv
+        . venv/bin/activate
+        pip install --upgrade https://github.com/lthiede/distexprunner/archive/compatibility-python3.12.zip
+        nohup distexp-server -o server.out -vv &> distexprunner.out &
+
+# - name: Run messageservice
+#   hosts: messageservice
+#   connection: ssh
+#   become: false
+#   tasks:
+#     - name: Run messageservice
+#       shell: |
+#         cd /home/ubuntu/cartero-integrate-segmentstore-highpoint/cmd/server
+#         nohup ./server -s {{ private_ip }}:8080 {{ logserviceServers }} &
+
+# - name: Run logservice
+#   hosts: logservice
+#   connection: ssh
+#   become: true
+#   tasks:
+#     - name: Run logservice
+#       shell: |
+#         cd /home/ubuntu/rust-segmentstore
+#         nohup ./target/release/rust-segmentstore server --ip {{ private_ip }}:50000 --ssd-paths {{ storage_devices[0] }} --number-threads 12 &
+
+# ok: [logservice-0] => {
+#     "storage_devices": [
+#         "/dev/nvme2n1",
+#         "/dev/nvme1n1"
+#     ]
+# }
+# ok: [logservice-1] => {
+#     "storage_devices": [
+#         "/dev/nvme2n1",
+#         "/dev/nvme1n1"
+#     ]
+# }
+# ok: [logservice-2] => {
+#     "storage_devices": [
+#         "/dev/nvme2n1",
+#         "/dev/nvme1n1"
+#     ]
+# }
+
+- name: List host addresses
+  hosts: localhost
+  become: false
+  tasks:
+    - debug:
+        msg: "messageservice servers {{ item }}"
+      with_items: "{{ groups['messageservice'] }}"
+    - debug:
+        msg: "logservice servers {{ item }}"
+      with_items: "{{ groups['logservice'] }}"
+    - debug:
+        msg: "Benchmark clients {{ item }}"
+      with_items: "{{ groups['client'] }}"

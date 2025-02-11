@@ -1,0 +1,5 @@
+# github account: lthiede
+Host github.com
+   HostName github.com
+   IdentityFile ~/.ssh/private_github
+   IdentitiesOnly yes
