@@ -3,33 +3,35 @@ import json
 import re
 
 #client = {
-#   "54.213.136.184" = "10.0.0.176"
+#   "35.166.36.153" = "10.0.0.149"
+#   "44.244.72.253" = "10.0.0.203"
 # }
-# client_ssh_host = "54.213.136.184"
+# client_ssh_host = "44.244.72.253"
 # logservice = {
-#   "35.165.249.49" = "10.0.0.9"
-#   "44.243.211.79" = "10.0.0.130"
-#   "52.34.71.16" = "10.0.0.46"
+#   "34.209.151.182" = "10.0.0.14"
+#   "44.243.69.110" = "10.0.0.139"
+#   "54.200.76.113" = "10.0.0.16"
 # }
 # messageservice = {
-#   "34.209.129.68" = "10.0.0.142"
+#   "18.237.49.19" = "10.0.0.132"
 # }
 
-# sudo ./target/release/rust-segmentstore server --ip 10.0.0.46:50000 --ssd-paths /dev/nvme1n1 --ssd-paths /dev/nvme2n1 --number-threads 12
-# sudo ./target/release/rust-segmentstore server --ip 10.0.0.130:50000 --ssd-paths /dev/nvme1n1 --ssd-paths /dev/nvme2n1 --number-threads 12
-# sudo ./target/release/rust-segmentstore server --ip 10.0.0.9:50000 --ssd-paths /dev/nvme1n1 --ssd-paths /dev/nvme2n1 --number-threads 12
+# sudo ./target/release/rust-segmentstore server --ip 10.0.0.14:50000 --ssd-paths /dev/nvme1n1 --ssd-paths /dev/nvme2n1 --number-threads 12
+# sudo ./target/release/rust-segmentstore server --ip 10.0.0.139:50000 --ssd-paths /dev/nvme1n1 --ssd-paths /dev/nvme2n1 --number-threads 12
+# sudo ./target/release/rust-segmentstore server --ip 10.0.0.16:50000 --ssd-paths /dev/nvme1n1 --ssd-paths /dev/nvme2n1 --number-threads 12
 
-# ./server -s 10.0.0.142:8080 -o 10.0.0.9:50000 -o 10.0.0.130:50000 -o 10.0.0.46:50000
+# ./server -s 10.0.0.132:8080 -o 10.0.0.14:50000 -o 10.0.0.139:50000 -o 10.0.0.16:50000
 
 # ./via_broker -p 64 -n 32 -l 100 -a 524288 -e 60 -m 2300000 -c 15 -s 10.0.0.204:8080
 
 # server has no attribute name
 server_list = ServerList(
-    Server('broker-0', '10.0.0.142', 20000, broker=True, log=False, client=False),
-    Server('log-0', '10.0.0.46', 20000, broker=False, log=True, client=False),
-    Server('log-1', '10.0.0.130', 20000, broker=False, log=True, client=False),
-    Server('log-2', '10.0.0.9', 20000, broker=False, log=True, client=False),
-    Server('client-0', '10.0.0.176', 20000, broker=False, log=False, client=True),
+    Server('broker-0', '10.0.0.132', 20000, broker=True, log=False, client=False),
+    Server('log-0', '10.0.0.14', 20000, broker=False, log=True, client=False),
+    Server('log-1', '10.0.0.139', 20000, broker=False, log=True, client=False),
+    Server('log-2', '10.0.0.16', 20000, broker=False, log=True, client=False),
+    Server('client-0', '10.0.0.149', 20000, broker=False, log=False, client=True),
+    Server('client-1', '10.0.0.203', 20000, broker=False, log=False, client=True),
 )
 
 class Print:
@@ -178,13 +180,14 @@ class Network:
 
 # latency
 # throughput
-partition_count = 1
-connections = 1
-message_size = 100
-max_batch_size = 0
-message_rate = 2_300_000
-max_pending = 1
+partition_count = 64
+connections = 32
+message_size = 3800
+max_batch_size = 32768
+message_rate = 302_631
+max_pending = 240
 experiment_duration = 60
+num_clients = 1
 
 @reg_exp(servers=server_list)
 def benchmark_log(servers):
@@ -192,14 +195,16 @@ def benchmark_log(servers):
     clients = []
     brokers = []
     log_nodes = []
+    num_clients_found = 0
     for server in server_list:
-        if server.client:
+        if server.client and num_clients_found < num_clients:
             clients.append(server)
+            num_clients_found += 1
         if server.broker:
             brokers.append(server)
         if server.log:
             log_nodes.append(server)
-    assert(len(clients) >= 1)
+    assert(len(clients) >= num_clients)
     assert(len(brokers) >= 1)
     assert(len(log_nodes) >= 1)
 
@@ -207,7 +212,10 @@ def benchmark_log(servers):
 
     # currently only supports one broker
     broker_arg = ''.join(['-s ' + item.ip + ':8080 ' for item in brokers])
-    benchmark_cmd = clients[0].run_cmd(f'cd /home/ubuntu/cartero-integrate-segmentstore-highpoint/experiments/produce_to_log/via_broker/ && ./via_broker -p {partition_count} -l {message_size} -m {message_rate} -a {max_batch_size} -n {connections} -c {max_pending} -e {experiment_duration} {broker_arg}')
+    benchmark_cmds = []
+    for c in clients:
+        benchmark_cmd = c.run_cmd(f'cd /home/ubuntu/message-service-prototype-cartero-integrate-segmentstore-highpoint/experiments/produce_to_log/via_broker/ && ./via_broker -p {partition_count} -l {message_size} -m {message_rate} -a {max_batch_size} -n {connections} -c {max_pending} -e {experiment_duration} {broker_arg}')
+        benchmark_cmds.append(benchmark_cmd)
         
     sleep(experiment_duration - 1)
     client_metrics = []
@@ -219,8 +227,9 @@ def benchmark_log(servers):
     log_metrics = []
     for b in log_nodes:
         log_metrics.append(start_metric_collectors(b))
-        
-    benchmark_cmd.wait()
+    
+    for i in range(num_clients):
+        benchmark_cmds[i].wait()
         
     result = {}
     result['clients'] = collect_metrics(client_metrics)

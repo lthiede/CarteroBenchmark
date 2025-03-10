@@ -132,7 +132,7 @@ resource "aws_instance" "messageservice" {
      content {
          market_type = "spot"
          spot_options {
-           max_price = 3.0
+           max_price = 0.5
          }
      }
   }
@@ -155,7 +155,7 @@ resource "aws_instance" "logservice" {
      content {
          market_type = "spot"
          spot_options {
-           max_price = 1.3
+           max_price = 1.0
          }
      }
   }
@@ -173,15 +173,15 @@ resource "aws_instance" "client" {
   vpc_security_group_ids = [
   aws_security_group.benchmark_security_group.id]
   count = var.num_instances["client"]
-  dynamic "instance_market_options" {
-     for_each = var.spot ? [1] : []
-     content {
-         market_type = "spot"
-         spot_options {
-           max_price = 3.0
-         }
-     }
-  }
+  #dynamic "instance_market_options" {
+  #   for_each = var.spot ? [1] : []
+  #   content {
+  #       market_type = "spot"
+  #       spot_options {
+  #         max_price = 1.0
+  #       }
+  #   }
+  #}
 
   tags = {
     Name = "client-${count.index}"

@@ -1,10 +1,10 @@
 public_key_path = "~/.ssh/pulsar_aws.pub"
 region          = "us-west-2"
-az              = "us-west-2a"
+az              = "us-west-2c"
 ami_arm         = "ami-0c65913e98a358f43"
 ami_x86         = "ami-0b8c6b923777519db"
 user            = "ubuntu"
-spot            = false
+spot            = true
 
 instance_types = {
   "messageservice" = "c7gn.4xlarge" 

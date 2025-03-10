@@ -22,7 +22,7 @@
         logserviceServers: "{{ groups['logservice'] | map('extract', hostvars, ['ansible_default_ipv4', 'address']) | map('regex_replace', '^(.*)$', '-o \\1:50000') | join(' ') }}"
     - set_fact:
         cartero_source:
-          src: "https://github.com/lthiede/cartero/archive/integrate-segmentstore-highpoint.tar.gz"
+          src: "https://github.com/lthiede/message-service-prototype-cartero/archive/integrate-segmentstore-highpoint.tar.gz"
           remote: yes
       when: cartero_source is not defined
     - set_fact:
@@ -135,7 +135,7 @@
     - name: Download and extract cartero  
       unarchive:
         src: "{{ cartero_source.src }}"
-        # src: "https://github.com/lthiede/cartero/archive/integrate-segmentstore-highpoint.tar.gz"
+        # src: "https://github.com/lthiede/message-service-prototype-cartero/archive/integrate-segmentstore-highpoint.tar.gz"
         dest: /home/ubuntu
         remote_src: "{{ cartero_source.remote }}"
         # remote_src: yes
@@ -145,7 +145,7 @@
     - name: Try to build broker but fail
       shell: |
         export PATH=$PATH:/home/ubuntu/bin/go/bin
-        cd /home/ubuntu/cartero-integrate-segmentstore-highpoint/cmd/server
+        cd /home/ubuntu/message-service-prototype-cartero-integrate-segmentstore-highpoint/cmd/server
         CGO_ENABLED=1 go build
       register: result
       ignore_errors: yes
@@ -170,7 +170,7 @@
     - name: Build broker
       shell: |
         export PATH=$PATH:/home/ubuntu/bin/go/bin
-        cd /home/ubuntu/cartero-integrate-segmentstore-highpoint/cmd/server
+        cd /home/ubuntu/message-service-prototype-cartero-integrate-segmentstore-highpoint/cmd/server
         CGO_ENABLED=1 go build -a
 
 - name: Install cartero client
@@ -193,13 +193,13 @@
     - name: Download and extract cartero  
       unarchive:
         src: "{{ cartero_source.src }}"
-        # src: "https://github.com/lthiede/cartero/archive/integrate-segmentstore-highpoint.tar.gz"
+        # src: "https://github.com/lthiede/message-service-prototype-cartero/archive/integrate-segmentstore-highpoint.tar.gz"
         dest: /home/ubuntu
         remote_src: "{{ cartero_source.remote }}"
         # remote_src: yes
     - name: Build cartero client
       shell: |
-        cd /home/ubuntu/cartero-integrate-segmentstore-highpoint/experiments/produce_to_log/via_broker
+        cd /home/ubuntu/message-service-prototype-cartero-integrate-segmentstore-highpoint/experiments/produce_to_log/via_broker
         export PATH=$PATH:/home/ubuntu/bin/go/bin
         go build
 

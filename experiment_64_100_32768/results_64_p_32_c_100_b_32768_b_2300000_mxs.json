@@ -1,0 +1,39 @@
+{
+    "SentMessagesPerSecondMeasurements": [
+        1430624.3948836513,
+        1983540.443998037,
+        1953032.6771113966,
+        2120734.2643182464,
+        2358943.62226109,
+        2358190.972856049
+    ],
+    "SentBytesPerSecondMeasurements": [
+        143062439.48836517,
+        198354044.3998038,
+        195303267.71113965,
+        212073426.43182468,
+        235894362.2261091,
+        235819097.28560492
+    ],
+    "AckMessagesPerSecondMeasurements": [
+        1428302.290874367,
+        1987033.628042071,
+        1935219.5174766055,
+        2134823.753952284,
+        2351627.9787545195,
+        2353683.5509017305
+    ],
+    "NumLatencyMeasurements": 48850,
+    "Latency50Pct": 0.028556552,
+    "Latency75Pct": 0.052862255,
+    "Latency90Pct": 0.107749389,
+    "Latency99Pct": 0.287021461,
+    "Latency999Pct": 0.444446969,
+    "Latency9999Pct": 0.576822849,
+    "MaxPending": 240,
+    "Partitions": 64,
+    "Connections": 32,
+    "MessageSize": 100,
+    "MaxBatchSize": 32768,
+    "MessagesPerSecondConfigured": 2300000
+}

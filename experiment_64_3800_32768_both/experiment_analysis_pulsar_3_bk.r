@@ -148,13 +148,21 @@ data <- data.frame(
 )
 
 ggplot(data) +
-  geom_line(aes(x = c_produce_rates, y = c_latencies, colour = "Prototype"),
+  geom_line(aes(x = c_produce_rates, y = c_latencies, colour = "prototype"),
             linewidth = 1) +
-  geom_line(aes(x = p_produce_rates, y = p_latencies, colour = "Pulsar"),
+  geom_point(aes(x = c_produce_rates, y = c_latencies, color = "prototype"), shape = 4, size = 4, stroke = 1.5) +
+  geom_line(aes(x = p_produce_rates, y = p_latencies, colour = "pulsar"),
             linewidth = 1) +
+  geom_point(aes(x = p_produce_rates, y = p_latencies, color = "pulsar"), shape = 4, size = 4, stroke = 1.5) +
   scale_x_continuous(breaks = c(60000, 120000, 180000, 240000, 300000),
                      limits = c(0, NA)) +
   scale_y_continuous(limits = c(0, NA)) +
+  scale_colour_manual(
+    values = c(
+      "prototype" = "#4CAF50",
+      "pulsar" = "#3F51B5"
+    )
+  ) +
   xlab("produce rate in messages per second") +
   ylab("50th percentile\nproduce latency in ms") +
   labs(colour = "") +
@@ -166,33 +174,33 @@ ggplot(data) +
     legend.text = element_text(size = 21)
   )
 
-ggplot(data) +
-  geom_line(
-    aes(x = c_produce_rates, y = c_disk_write_mb, colour = "prototype"),
-    linewidth = 1
-  ) +
-  geom_point(aes(x = c_produce_rates, y = c_disk_write_mb, color = "prototype"), shape = 4, size = 4, stroke = 1.5) +
-  geom_line(aes(x = p_produce_rates, y = p_disk_write_mb, colour = "pulsar"),
-            linewidth = 1) +
-  geom_point(aes(x = p_produce_rates, y = p_disk_write_mb, color = "pulsar"), shape = 4, size = 4, stroke = 1.5) +
-  geom_hline(aes(yintercept=1600, colour = "maximum"), linetype = "dashed", linewidth = 1) +
-  scale_x_continuous(breaks = c(60000, 120000, 180000, 240000, 300000),
-                     limits = c(0, NA)) +
-  scale_y_continuous(limits = c(0, NA)) +
-  scale_colour_manual(
-    values = c(
-      "prototype" = "#4CAF50",
-      "maximum" = "#F44336",
-      "pulsar" = "#3F51B5"
-    )
-  ) +
-  xlab("produce rate in messages per second") +
-  ylab("SSD write throughput in MB/s") +
-  labs(colour = "") +
-  theme(
-    text = element_text(size = 24),
-    axis.title = element_text(size = 24),
-    axis.text = element_text(size = 19),
-    legend.title = element_text(size = 24),
-    legend.text = element_text(size = 21)
-  )
+# ggplot(data) +
+#   geom_line(
+#     aes(x = c_produce_rates, y = c_disk_write_mb, colour = "prototype"),
+#     linewidth = 1
+#   ) +
+#   geom_point(aes(x = c_produce_rates, y = c_disk_write_mb, color = "prototype"), shape = 4, size = 4, stroke = 1.5) +
+#   geom_line(aes(x = p_produce_rates, y = p_disk_write_mb, colour = "pulsar"),
+#             linewidth = 1) +
+#   geom_point(aes(x = p_produce_rates, y = p_disk_write_mb, color = "pulsar"), shape = 4, size = 4, stroke = 1.5) +
+#   geom_hline(aes(yintercept=1600, colour = "maximum"), linetype = "dashed", linewidth = 1) +
+#   scale_x_continuous(breaks = c(60000, 120000, 180000, 240000, 300000),
+#                      limits = c(0, NA)) +
+#   scale_y_continuous(limits = c(0, NA)) +
+#   scale_colour_manual(
+#     values = c(
+#       "prototype" = "#4CAF50",
+#       "maximum" = "#F44336",
+#       "pulsar" = "#3F51B5"
+#     )
+#   ) +
+#   xlab("produce rate in messages per second") +
+#   ylab("SSD write throughput in MB/s") +
+#   labs(colour = "") +
+#   theme(
+#     text = element_text(size = 24),
+#     axis.title = element_text(size = 24),
+#     axis.text = element_text(size = 19),
+#     legend.title = element_text(size = 24),
+#     legend.text = element_text(size = 21)
+#   )
